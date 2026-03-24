@@ -1,0 +1,65 @@
+{
+  "source_url": "https://www.noramstore.ca/i-27203849?q=TO1100243",
+  "product_id": "27203849",
+  "title": "2009-2011 Toyota Camry Rear Bumper Cover",
+  "sku": "TO1100243",
+  "price": "$1,056.67",
+  "availability": "Usually ships in 7 to 10 business days. If out of stock, fulfillment times are typically 4-6 weeks",
+  "brand": "LKQ",
+  "brand_url": "https://www.noramstore.ca/b-4-lkq.html",
+  "condition": "Condition: New",
+  "fitment": [
+    {
+      "text": "2011 Toyota Camry",
+      "url": "https://www.noramstore.ca/ag-1778443.1778235.1778248-2011-toyota-camry.html"
+    },
+    {
+      "text": "2010 Toyota Camry",
+      "url": "https://www.noramstore.ca/ag-1778441.1778235.1778248-2010-toyota-camry.html"
+    },
+    {
+      "text": "2009 Toyota Camry",
+      "url": "https://www.noramstore.ca/ag-1778439.1778235.1778248-2009-toyota-camry.html"
+    },
+    {
+      "text": "2008 Toyota Camry",
+      "url": "https://www.noramstore.ca/ag-1778438.1778235.1778248-2008-toyota-camry.html"
+    },
+    {
+      "text": "2007 Toyota Camry",
+      "url": "https://www.noramstore.ca/ag-1778431.1778235.1778248-2007-toyota-camry.html"
+    }
+  ],
+  "features_rows": [
+    [
+      "•Single Exhaust Outlet"
+    ],
+    [
+      "•Without Spoiler Holes"
+    ],
+    [
+      "•Second Design"
+    ]
+  ],
+  "dimensions": {
+    "unit": "in",
+    "width": 28.0,
+    "height": 17.0,
+    "length": 94.0
+  },
+  "weight_lb": 17.0,
+  "main_image_url": "https://www.noramstore.ca/images/M216334034.jpg",
+  "expected_sku": "TO1100243",
+  "sku_mismatch": false,
+  "scraped_at": "2026-03-24T12:46:34.225442+00:00",
+  "search": {
+    "api": "https://api.sunhammer.io/products",
+    "sku_query": "TO1100243",
+    "chosen_index": 0,
+    "chosen_stockid": "TO1100243",
+    "chosen_title": "2009-2011 Toyota Camry Rear Bumper Cover",
+    "match_reason": "exact stockid match",
+    "exact_stockid_match": true,
+    "results_count": 50
+  }
+}

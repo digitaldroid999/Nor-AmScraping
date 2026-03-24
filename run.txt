@@ -1,0 +1,11 @@
+# INPUT_CSV: header row; part numbers in part_number / sku / stockid (auto) or --sku-column
+# OUTPUT_CSV: one row per input — filled only when API stockid exactly matches that part
+python noramstore_scraper.py "all skus.csv" results.csv
+
+python noramstore_scraper.py threeSKUs.csv out.csv --verbose
+
+# Optional: throttle requests for large runs
+python noramstore_scraper.py "all skus.csv" results.csv --sleep 0.3 --sleep-between-searches 0.5
+
+# Cap API pages scanned per part (testing)
+python noramstore_scraper.py threeSKUs.csv out.csv --max-pages 2 --limit 50

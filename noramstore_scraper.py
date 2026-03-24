@@ -592,6 +592,50 @@ CSV_EXPORT_FIELDNAMES = [
 BLANK_CSV_ROW = {k: "" for k in CSV_EXPORT_FIELDNAMES}
 
 
+def _count_csv_data_rows(path: str) -> int:
+    """Number of data rows in a CSV (excludes header). Missing/empty file -> 0."""
+    if not os.path.isfile(path):
+        return 0
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            reader = csv.reader(f)
+            header = next(reader, None)
+            if not header:
+                return 0
+            return sum(1 for _ in reader)
+    except OSError:
+        return 0
+
+
+def _validate_output_csv_header(path: str) -> None:
+    """Ensure existing output uses the same columns (for --resume)."""
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        reader = csv.reader(f)
+        header = next(reader, None)
+    if not header:
+        raise ValueError(f"Output CSV has no header: {path}")
+    got = [h.strip() for h in header]
+    if got != CSV_EXPORT_FIELDNAMES:
+        raise ValueError(
+            f"Output CSV columns do not match expected header.\n"
+            f"Expected: {CSV_EXPORT_FIELDNAMES}\nGot: {got}"
+        )
+
+
+def _count_filled_and_blank_rows(path: str) -> Tuple[int, int]:
+    """Scan output CSV: rows with non-empty SKU vs blank."""
+    filled = 0
+    blank = 0
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if (row.get("SKU") or "").strip():
+                filled += 1
+            else:
+                blank += 1
+    return filled, blank
+
+
 def _read_skus_from_csv(path: str, column_hint: Optional[str] = None) -> Tuple[List[str], str]:
     """
     Read SKU / part numbers from a CSV. Header row required (uses csv.DictReader).
@@ -731,6 +775,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=0.0,
         help="Extra seconds after each input row.",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Append to OUTPUT_CSV instead of overwriting. Skips the first N input rows "
+            "where N = number of data rows already in OUTPUT_CSV (same INPUT_CSV as before)."
+        ),
+    )
     parser.add_argument("--verbose", action="store_true", help="Debug logging.")
     args = parser.parse_args(argv)
 
@@ -748,22 +800,63 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not skus:
         parser.error(f"No part numbers in column {col!r}: {csv_in}")
 
+    total_input_rows = len(skus)
+    err_path = os.path.splitext(csv_out)[0] + "_errors.json"
+    prev_errors: List[Dict[str, Any]] = []
+
+    if args.resume:
+        if not os.path.isfile(csv_out):
+            parser.error(f"--resume requires existing OUTPUT_CSV: {csv_out}")
+        try:
+            _validate_output_csv_header(csv_out)
+        except ValueError as exc:
+            parser.error(str(exc))
+        already_done = _count_csv_data_rows(csv_out)
+        if already_done > total_input_rows:
+            parser.error(
+                f"Output has {already_done} data rows but input has only {total_input_rows} SKUs."
+            )
+        if already_done == total_input_rows:
+            print(
+                f"Nothing to do: {csv_out} already has {already_done} rows "
+                f"(matches input length)."
+            )
+            return 0
+        skus_todo = skus[already_done:]
+        if os.path.isfile(err_path):
+            try:
+                with open(err_path, encoding="utf-8") as ef:
+                    prev_doc = json.load(ef)
+                prev_errors = list(prev_doc.get("errors", []))
+            except (OSError, json.JSONDecodeError):
+                pass
+        file_mode = "a"
+        write_header = False
+        start_log_index = already_done
+    else:
+        skus_todo = skus
+        file_mode = "w"
+        write_header = True
+        start_log_index = 0
+
     out_dir = os.path.dirname(csv_out)
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
 
     scraper = NoramStoreScraper(api_key=args.api_key)
-    matched_rows = 0
-    blank_rows = 0
-    errors_acc: List[Dict[str, Any]] = []
-    with open(csv_out, "w", newline="", encoding="utf-8-sig") as f:
+    errors_this_run: List[Dict[str, Any]] = []
+    # utf-8-sig only for a new file (BOM once). Append with plain utf-8 to avoid a second BOM.
+    out_encoding = "utf-8-sig" if write_header else "utf-8"
+    with open(csv_out, file_mode, newline="", encoding=out_encoding) as f:
         writer = csv.DictWriter(f, fieldnames=CSV_EXPORT_FIELDNAMES)
-        writer.writeheader()
-        for i, term in enumerate(skus):
+        if write_header:
+            writer.writeheader()
+        for j, term in enumerate(skus_todo):
+            i = start_log_index + j
             scraper.log.info(
                 "Row %s/%s: %r (column %r)",
                 i + 1,
-                len(skus),
+                total_input_rows,
                 term,
                 col,
             )
@@ -775,38 +868,38 @@ def main(argv: Optional[List[str]] = None) -> int:
                     sleep_s=args.sleep,
                 )
                 for err in bundle["errors"]:
-                    errors_acc.append({"search_term": term, **err})
+                    errors_this_run.append({"search_term": term, **err})
                 if bundle["results"]:
                     writer.writerow(record_to_csv_row(bundle["results"][0]))
-                    matched_rows += 1
                 else:
                     writer.writerow(BLANK_CSV_ROW)
-                    blank_rows += 1
             except Exception as exc:
                 scraper.log.exception("Failed for %r", term)
-                errors_acc.append({"search_term": term, "error": str(exc)})
+                errors_this_run.append({"search_term": term, "error": str(exc)})
                 writer.writerow(BLANK_CSV_ROW)
-                blank_rows += 1
             f.flush()
             if args.sleep_between_searches > 0:
                 time.sleep(args.sleep_between_searches)
 
-    err_path = os.path.splitext(csv_out)[0] + "_errors.json"
+    matched_rows, blank_rows = _count_filled_and_blank_rows(csv_out)
+    errors_acc = prev_errors + errors_this_run
     scraper.save_json(
         {
-            "output_rows": len(skus),
+            "output_rows": total_input_rows,
             "matched_rows": matched_rows,
             "blank_rows": blank_rows,
-            "search_terms": len(skus),
+            "search_terms": total_input_rows,
             "errors": errors_acc,
             "scraped_at": datetime.now(timezone.utc).isoformat(),
+            "resumed": bool(args.resume),
         },
         err_path,
     )
     print(
-        f"Wrote {len(skus)} rows to {csv_out} "
-        f"({matched_rows} exact SKU match, {blank_rows} blank; "
-        f"{len(errors_acc)} error entries -> {err_path})"
+        f"Output {csv_out}: {matched_rows + blank_rows} total data rows "
+        f"({matched_rows} exact SKU match, {blank_rows} blank); "
+        f"{len(errors_acc)} error entries -> {err_path}"
+        + (f" (appended {len(skus_todo)} rows)" if args.resume else "")
     )
     return 0 if not errors_acc else 2
 

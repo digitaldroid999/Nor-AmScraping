@@ -9,3 +9,6 @@ python noramstore_scraper.py "all skus.csv" results.csv --sleep 0.3 --sleep-betw
 
 # Cap API pages scanned per part (testing)
 python noramstore_scraper.py threeSKUs.csv out.csv --max-pages 2 --limit 50
+
+# Continue after a stop: same INPUT_CSV and OUTPUT_CSV; appends rows, does not overwrite
+python noramstore_scraper.py "all skus.csv" results.csv --resume

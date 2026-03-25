@@ -12,3 +12,9 @@ python noramstore_scraper.py threeSKUs.csv out.csv --max-pages 2 --limit 50
 
 # Continue after a stop: same INPUT_CSV and OUTPUT_CSV; appends rows, does not overwrite
 python noramstore_scraper.py "all skus.csv" results.csv --resume
+
+# Full catalog: years → makes → models (depth-first), then HTML parse (same CSV as noramstore_scraper)
+python noramstore_catalog_scraper.py --skus-file "all skus.csv" --all-products all_products.csv --fitment-products fitment_products.csv
+python noramstore_catalog_scraper.py --skus-file "all skus.csv" --resume
+# Optional: --html-sleep 0.2  (pause after each product page fetch; API uses --sleep)
+# Old flat-index checkpoints are not compatible — delete crawl_checkpoint.json or use a new --checkpoint

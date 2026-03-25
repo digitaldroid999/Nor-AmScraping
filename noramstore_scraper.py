@@ -465,6 +465,82 @@ class NoramStoreScraper:
             "scraped_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    def scrape_product_page_from_listing(
+        self,
+        listing: Dict[str, Any],
+        *,
+        query_for_url: str,
+        search_meta_extra: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+        """
+        Given a Sunhammer ``/products`` listing dict (``url``, ``stockid``, …), fetch the
+        storefront product page and return the same record shape as ``parse_product_page``.
+
+        Used when listings come from fitment (or other) API queries, not only from
+        ``find_exact_stock_listing``. Returns ``(record | None, errors)``.
+        """
+        q = query_for_url.strip()
+        errors: List[Dict[str, Any]] = []
+        api_fields = (
+            "id",
+            "stockid",
+            "title",
+            "price",
+            "brand_name",
+            "condition",
+            "url",
+            "dealerid",
+            "availability",
+            "availability_remarks",
+            "image_url",
+        )
+        try:
+            url = _canonical_product_url_from_listing(listing, q)
+        except ValueError as exc:
+            errors.append({"stockid": listing.get("stockid"), "error": str(exc)})
+            return None, errors
+
+        meta: Dict[str, Any] = {
+            "search": {
+                "query": q,
+                "exact_stock_match": True,
+                "api_pages_scanned": 0,
+                "total_reported_by_api": None,
+                "api_hit": {k: listing.get(k) for k in api_fields},
+            }
+        }
+        if search_meta_extra:
+            meta["search"].update(search_meta_extra)
+
+        try:
+            html = self.fetch_text(url)
+            record = self.parse_product_page(
+                html, page_url=url, expected_sku=q, extra_meta=meta
+            )
+            api_stock = listing.get("stockid")
+            page_sku = record.get("sku")
+            if (
+                api_stock
+                and page_sku
+                and api_stock.strip().upper() != page_sku.strip().upper()
+            ):
+                record["sku_consistency_warning"] = {
+                    "api_stockid": api_stock,
+                    "page_sku": page_sku,
+                }
+            return record, []
+        except requests.RequestException as exc:
+            self.log.error("HTTP error scraping %s: %s", url, exc)
+            errors.append(
+                {"url": url, "stockid": listing.get("stockid"), "error": str(exc)}
+            )
+        except Exception as exc:
+            self.log.exception("Failed scraping %s", url)
+            errors.append(
+                {"url": url, "stockid": listing.get("stockid"), "error": str(exc)}
+            )
+        return None, errors
+
     # ---------------------------------------------------------------------
     # Product page parsing
     # ---------------------------------------------------------------------
